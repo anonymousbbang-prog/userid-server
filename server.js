@@ -15,17 +15,21 @@ app.use(express.json());
 app.post("/recibir", (req, res) => {
   let user_id = "";
   let user_name = "";
+  let testType = "";
 
   // Detectar tipo de contenido
   if (req.is("application/json")) {
     user_id = (req.body.user_id || "").toString().trim();
     user_name = (req.body.User || "").toString().trim();
+    testType = (req.body.TEST || "").toString().trim();
   } else if (req.is("application/x-www-form-urlencoded")) {
     user_id = (req.body.user_id || "").toString().trim();
     user_name = (req.body.User || "").toString().trim();
+    testType = (req.body.TEST || "").toString().trim();
   } else {
     user_id = req.body?.user_id ? req.body.user_id.toString().trim() : "";
     user_name = req.body?.User ? req.body.User.toString().trim() : "";
+    testType = req.body?.TEST ? req.body.TEST.toString().trim() : "";
   }
 
   // 🌐 Obtener IP desde donde se recibió la info
@@ -45,6 +49,7 @@ app.post("/recibir", (req, res) => {
   if (user_id) {
     const cleanId = user_id.replace(/[^\w\-@\.]/g, "");
     const cleanUser = lastUser ? lastUser.replace(/[^\w\s\-@\.]/g, "") : "-";
+    const cleanTest = testType ? testType.replace(/[^\w\s\-@\.]/g, "") : "-";
 
     const now = new Date();
     const fechaFormateada = `${now.getFullYear()}/${String(
@@ -55,10 +60,11 @@ app.post("/recibir", (req, res) => {
       now.getSeconds()
     ).padStart(2, "0")}`;
 
-    const line = `${fechaFormateada},${clientIp},${cleanId},${cleanUser}\n`;
+    // 🔹 Ahora incluye también la columna TEST
+    const line = `${fechaFormateada},${clientIp},${cleanId},${cleanUser},${cleanTest}\n`;
     fs.appendFileSync("ids_store.csv", line, { flag: "a" });
 
-    console.log(`✅ Guardado: ${cleanId} (${cleanUser}) desde ${clientIp}`);
+    console.log(`✅ Guardado: ${cleanId} (${cleanUser}) [${cleanTest}] desde ${clientIp}`);
     res.send("OK");
     return;
   }
@@ -103,8 +109,8 @@ app.get("/lista", (req, res) => {
   const contenido = fs.readFileSync(file, "utf8").trim().split("\n");
   let filas = contenido
     .map((line) => {
-      const [fecha, ip, id, user] = line.split(",");
-      return `<tr><td>${fecha}</td><td>${ip}</td><td>${id}</td><td>${user}</td></tr>`;
+      const [fecha, ip, id, user, test] = line.split(",");
+      return `<tr><td>${fecha}</td><td>${ip}</td><td>${id}</td><td>${user}</td><td>${test}</td></tr>`;
     })
     .join("");
 
@@ -115,7 +121,7 @@ app.get("/lista", (req, res) => {
       <title>Lista de user_id</title>
       <style>
         body { font-family: sans-serif; margin: 40px; background: #fafafa; color: #333; }
-        table { border-collapse: collapse; width: 100%; max-width: 800px; margin: auto; }
+        table { border-collapse: collapse; width: 100%; max-width: 900px; margin: auto; }
         th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
         th { background: #f0f0f0; }
         h2 { text-align: center; }
@@ -124,7 +130,7 @@ app.get("/lista", (req, res) => {
     <body>
       <h2>📋 Lista de registros recibidos</h2>
       <table>
-        <tr><th>Fecha</th><th>IP</th><th>User ID</th><th>User</th></tr>
+        <tr><th>Fecha</th><th>IP</th><th>User ID</th><th>User</th><th>TEST</th></tr>
         ${filas}
       </table>
     </body>
