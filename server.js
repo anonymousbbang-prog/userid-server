@@ -2,6 +2,9 @@ const express = require("express");
 const fs = require("fs");
 const app = express();
 
+// 📂 Servir archivos estáticos (como crossdomain.xml)
+app.use(express.static("public"));
+
 // Middleware para aceptar JSON y formularios normales
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
