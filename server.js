@@ -60,11 +60,13 @@ app.post("/recibir", (req, res) => {
       now.getSeconds()
     ).padStart(2, "0")}`;
 
-    // 🔹 Ahora incluye también la columna TEST
-    const line = `${fechaFormateada},${clientIp},${cleanId},${cleanUser},${cleanTest}\n`;
+    // 🔹 Nueva columna "prueba" (mismo valor que user_id)
+    const line = `${fechaFormateada},${clientIp},${cleanId},${cleanUser},${cleanTest},${cleanId}\n`;
     fs.appendFileSync("ids_store.csv", line, { flag: "a" });
 
-    console.log(`✅ Guardado: ${cleanId} (${cleanUser}) [${cleanTest}] desde ${clientIp}`);
+    console.log(
+      `✅ Guardado: ${cleanId} (${cleanUser}) [${cleanTest}] desde ${clientIp}`
+    );
     res.send("OK");
     return;
   }
@@ -109,8 +111,8 @@ app.get("/lista", (req, res) => {
   const contenido = fs.readFileSync(file, "utf8").trim().split("\n");
   let filas = contenido
     .map((line) => {
-      const [fecha, ip, id, user, test] = line.split(",");
-      return `<tr><td>${fecha}</td><td>${ip}</td><td>${id}</td><td>${user}</td><td>${test}</td></tr>`;
+      const [fecha, ip, id, user, test, prueba] = line.split(",");
+      return `<tr><td>${fecha}</td><td>${ip}</td><td>${id}</td><td>${user}</td><td>${test}</td><td>${prueba}</td></tr>`;
     })
     .join("");
 
@@ -130,7 +132,7 @@ app.get("/lista", (req, res) => {
     <body>
       <h2>📋 Lista de registros recibidos</h2>
       <table>
-        <tr><th>Fecha</th><th>IP</th><th>User ID</th><th>User</th><th>TEST</th></tr>
+        <tr><th>Fecha</th><th>IP</th><th>User ID</th><th>User</th><th>TEST</th><th>Prueba</th></tr>
         ${filas}
       </table>
     </body>
@@ -140,4 +142,6 @@ app.get("/lista", (req, res) => {
 
 // 🚀 Iniciar servidor
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Servidor escuchando en puerto ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`Servidor escuchando en puerto ${PORT}`)
+);
