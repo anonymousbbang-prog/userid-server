@@ -2,25 +2,32 @@ const express = require("express");
 const fs = require("fs");
 const app = express();
 
-// Middleware para aceptar JSON y formularios normales
+// Middleware para aceptar JSON, formularios y texto plano
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(express.text()); // <- Agregado para capturar body tipo text/plain (Flash a veces lo usa)
 
 // 📩 Endpoint para recibir user_id y usuario
 app.post("/recibir", (req, res) => {
   let user_id = "";
   let usuario = "";
 
-  // Detectar el tipo de contenido
-  if (req.is("application/json")) {
-    user_id = (req.body.user_id || "").toString().trim();
-    usuario = (req.body.usuario || "").toString().trim();
-  } else if (req.is("application/x-www-form-urlencoded")) {
-    user_id = (req.body.user_id || "").toString().trim();
-    usuario = (req.body.usuario || "").toString().trim();
-  } else {
-    user_id = req.body?.user_id ? req.body.user_id.toString().trim() : "";
-    usuario = req.body?.usuario ? req.body.usuario.toString().trim() : "";
+  try {
+    // Si viene en formato texto plano (Flash viejo)
+    if (typeof req.body === "string") {
+      const partes = req.body.split("&");
+      partes.forEach((p) => {
+        const [key, value] = p.split("=");
+        if (key === "user_id") user_id = decodeURIComponent(value || "");
+        if (key === "usuario") usuario = decodeURIComponent(value || "");
+      });
+    } else {
+      // Si viene como JSON o form-urlencoded normal
+      user_id = (req.body.user_id || "").toString().trim();
+      usuario = (req.body.usuario || "").toString().trim();
+    }
+  } catch (err) {
+    console.error("❌ Error procesando datos:", err);
   }
 
   if (!user_id) {
@@ -33,9 +40,10 @@ app.post("/recibir", (req, res) => {
   const cleanUser = usuario.replace(/[^\w\s\-\.\@\_]/g, "");
 
   // Guardar en CSV con fecha y hora ISO
-  const line = `${new Date().toISOString()},${cleanUser},${cleanID}\n`;
+  const line = `${new Date().toISOString()},${cleanUser || "-"},${cleanID}\n`;
   fs.appendFileSync("ids_store.csv", line, { flag: "a" });
 
+  console.log(`✅ Guardado: ${cleanUser} (${cleanID})`);
   res.send("OK");
 });
 
