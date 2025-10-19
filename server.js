@@ -49,6 +49,23 @@ app.post("/recibir", (req, res) => {
   res.status(400).send("Sin datos válidos");
 });
 
+// 🔒 Protección IP: solo permite a 188.77.187.80 acceder a /lista
+app.get("/lista", (req, res, next) => {
+  const clientIp =
+    (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
+      .split(",")[0]
+      .trim();
+
+  const allowedIp = "188.77.187.80";
+
+  if (clientIp === allowedIp || clientIp.endsWith(allowedIp)) {
+    next(); // ✅ IP permitida, continúa al siguiente manejador
+  } else {
+    console.warn(`🚫 Acceso denegado desde IP: ${clientIp}`);
+    res.status(403).send("Acceso denegado");
+  }
+});
+
 // 📄 Endpoint para ver los IDs guardados (en HTML bonito)
 app.get("/lista", (req, res) => {
   const file = "ids_store.csv";
