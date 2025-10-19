@@ -9,36 +9,42 @@ app.use(express.static("public"));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// 📩 Endpoint para recibir user_id
+// 📩 Endpoint para recibir datos (user_id o User)
 app.post("/recibir", (req, res) => {
   let user_id = "";
+  let user_name = "";
 
-  // Detectar el tipo de contenido
+  // Detectar tipo de contenido
   if (req.is("application/json")) {
     user_id = (req.body.user_id || "").toString().trim();
+    user_name = (req.body.User || "").toString().trim();
   } else if (req.is("application/x-www-form-urlencoded")) {
     user_id = (req.body.user_id || "").toString().trim();
+    user_name = (req.body.User || "").toString().trim();
   } else {
-    // Intento genérico si el Content-Type no se reconoce
     user_id = req.body?.user_id ? req.body.user_id.toString().trim() : "";
+    user_name = req.body?.User ? req.body.User.toString().trim() : "";
   }
 
-  if (!user_id) {
-    res.status(400).send("Falta user_id");
+  // Evitar datos vacíos
+  if (!user_id && !user_name) {
+    res.status(400).send("Falta user_id o User");
     return;
   }
 
   // Limpiar caracteres raros
-  const clean = user_id.replace(/[^\w\-@\.]/g, "");
+  const cleanId = user_id.replace(/[^\w\-@\.]/g, "");
+  const cleanUser = user_name.replace(/[^\w\s\-@\.áéíóúÁÉÍÓÚñÑ]/g, "");
 
-  // Guardar en CSV con fecha y hora ISO
-  const line = `${new Date().toISOString()},${clean}\n`;
+  // Guardar con fecha y hora ISO
+  const line = `${new Date().toISOString()},${cleanId || "-"},${cleanUser || "-"}\n`;
   fs.appendFileSync("ids_store.csv", line, { flag: "a" });
 
+  console.log(`📥 Recibido -> user_id: ${cleanId || "-"} | User: ${cleanUser || "-"}`);
   res.send("OK");
 });
 
-// 📄 Endpoint para ver los IDs guardados (en HTML bonito)
+// 📄 Endpoint para ver los datos guardados
 app.get("/lista", (req, res) => {
   const file = "ids_store.csv";
 
@@ -58,8 +64,8 @@ app.get("/lista", (req, res) => {
 
   let filas = contenido
     .map((line) => {
-      const [fecha, id] = line.split(",");
-      return `<tr><td>${fecha}</td><td>${id}</td></tr>`;
+      const [fecha, id, user] = line.split(",");
+      return `<tr><td>${new Date(fecha).toLocaleString()}</td><td>${id}</td><td>${user}</td></tr>`;
     })
     .join("");
 
@@ -67,19 +73,20 @@ app.get("/lista", (req, res) => {
   res.send(`
     <html>
     <head>
-      <title>Lista de user_id</title>
+      <title>Lista de datos recibidos</title>
       <style>
         body { font-family: sans-serif; margin: 40px; background: #fafafa; color: #333; }
-        table { border-collapse: collapse; width: 100%; max-width: 600px; margin: auto; }
+        table { border-collapse: collapse; width: 100%; max-width: 800px; margin: auto; }
         th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
         th { background: #f0f0f0; }
+        tr:nth-child(even) { background: #f9f9f9; }
         h2 { text-align: center; }
       </style>
     </head>
     <body>
-      <h2>📋 Lista de user_id recibidos</h2>
+      <h2>📋 Lista de datos recibidos</h2>
       <table>
-        <tr><th>Fecha</th><th>User ID</th></tr>
+        <tr><th>Fecha</th><th>User ID</th><th>User</th></tr>
         ${filas}
       </table>
     </body>
