@@ -1,21 +1,39 @@
 const express = require("express");
 const fs = require("fs");
+const path = require("path");
 const app = express();
 
-// 📂 Servir archivos estáticos (como crossdomain.xml)
-app.use(express.static("public"));
+const DATA_FILE = path.join(__dirname, "ids_store.csv");
+const USER_FILE = path.join(__dirname, "last_user.json");
 
-// Middleware para aceptar JSON y formularios normales
+let lastUser = "";
+
+// Cargar el archivo de usuario guardado al iniciar
+if (fs.existsSync(USER_FILE)) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(USER_FILE, "utf8"));
+    if (obj && obj.lastUser) {
+      lastUser = obj.lastUser;
+      console.log("🧠 Cargado último User desde archivo:", lastUser);
+    }
+  } catch(e) {
+    console.warn("⚠️ No se pudo parsear last_user.json:", e.message);
+  }
+}
+
+// Middleware para capturar body
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// 📩 Endpoint para recibir user_id o User
+// 📩 Endpoint para recibir datos
 app.post("/recibir", (req, res) => {
   let user_id = "";
   let user_name = "";
 
-  // Detectar tipo de contenido
-  if (req.is("application/json") || req.is("application/x-www-form-urlencoded")) {
+  if (req.is("application/json")) {
+    user_id = (req.body.user_id || "").toString().trim();
+    user_name = (req.body.User || "").toString().trim();
+  } else if (req.is("application/x-www-form-urlencoded")) {
     user_id = (req.body.user_id || "").toString().trim();
     user_name = (req.body.User || "").toString().trim();
   } else {
@@ -23,28 +41,41 @@ app.post("/recibir", (req, res) => {
     user_name = req.body?.User ? req.body.User.toString().trim() : "";
   }
 
-  // Limpiar caracteres sospechosos
-  const clean_id = user_id.replace(/[^\w\-@\.]/g, "");
-  const clean_name = user_name.replace(/[^\w\-@\.]/g, "");
-
-  // Evitar guardar vacío
-  if (!clean_id && !clean_name) {
-    res.status(400).send("Falta user_id o User");
+  // Si vino un nombre de usuario, lo guardamos para el siguiente envío
+  if (user_name) {
+    lastUser = user_name;
+    fs.writeFileSync(USER_FILE, JSON.stringify({lastUser}), "utf8");
+    console.log("🧠 Guardado último User:", lastUser);
+    res.send("OK (User guardado)");
     return;
   }
 
-  // Guardar en CSV con fecha, user_id y user_name
-  const line = `${new Date().toISOString()},${clean_id || "-"},${clean_name || "-"}\n`;
-  fs.appendFileSync("ids_store.csv", line, { flag: "a" });
+  // Si vino un user_id, lo guardamos junto al último User
+  if (user_id) {
+    const cleanId = user_id.replace(/[^\w\-@\.]/g, "");
+    const cleanUser = lastUser ? lastUser.replace(/[^\w\s\-@\.]/g, "") : "-";
+    const line = `${new Date().toISOString()},${cleanId},${cleanUser}\n`;
+    fs.appendFileSync(DATA_FILE, line, { flag: "a" });
+    console.log("✅ Guardado:", cleanId, "(", cleanUser, ")");
+    res.send("OK (User ID guardado)");
+    return;
+  }
 
-  res.send("OK");
+  res.status(400).send("Sin datos válidos");
 });
 
-// 📄 Endpoint para ver los IDs guardados (HTML)
-app.get("/lista", (req, res) => {
-  const file = "ids_store.csv";
+// 🎯 Middleware para restringir acceso a /lista solo desde IP específica
+app.get("/lista", (req, res, next) => {
+  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const allowedIp = "188.77.187.80";
 
-  if (!fs.existsSync(file)) {
+  if (clientIp === allowedIp) {
+    next();
+  } else {
+    res.status(403).send("Acceso denegado");
+  }
+}, (req, res) => {
+  if (!fs.existsSync(DATA_FILE)) {
     res.send(`
       <html>
       <head><title>Lista vacía</title></head>
@@ -56,20 +87,17 @@ app.get("/lista", (req, res) => {
     return;
   }
 
-  const contenido = fs.readFileSync(file, "utf8").trim().split("\n");
-
-  let filas = contenido
-    .map((line) => {
-      const [fecha, id, user] = line.split(",");
-      return `<tr><td>${fecha}</td><td>${id}</td><td>${user}</td></tr>`;
-    })
-    .join("");
+  const contenido = fs.readFileSync(DATA_FILE, "utf8").trim().split("\n");
+  const filas = contenido.map(line => {
+    const [fecha, id, user] = line.split(",");
+    return `<tr><td>${fecha}</td><td>${id}</td><td>${user}</td></tr>`;
+  }).join("");
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(`
     <html>
     <head>
-      <title>Lista de usuarios</title>
+      <title>Lista de user_id</title>
       <style>
         body { font-family: sans-serif; margin: 40px; background: #fafafa; color: #333; }
         table { border-collapse: collapse; width: 100%; max-width: 700px; margin: auto; }
@@ -79,7 +107,7 @@ app.get("/lista", (req, res) => {
       </style>
     </head>
     <body>
-      <h2>📋 Lista de user_id y nombres recibidos</h2>
+      <h2>📋 Lista de user_id y User</h2>
       <table>
         <tr><th>Fecha</th><th>User ID</th><th>User</th></tr>
         ${filas}
@@ -89,6 +117,6 @@ app.get("/lista", (req, res) => {
   `);
 });
 
-// 🚀 Iniciar el servidor
+// 🚀 Iniciar servidor
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Servidor escuchando en puerto ${PORT}`));
